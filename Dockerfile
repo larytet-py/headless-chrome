@@ -96,10 +96,10 @@ RUN python3 -m pip install \
     pytest-benchmark \
     pytest-asyncio
 
-RUN python3 -m pip install -U git+https://github.com/pyppeteer/pyppeteer@dev
-
 COPY requirements.txt ./
 RUN python3 -m pip install -r requirements.txt
+
+RUN python3 -m pip freeze --local --all
 
 # Run everything after as non-privileged user.
 USER chrome
