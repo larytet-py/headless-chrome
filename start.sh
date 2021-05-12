@@ -23,7 +23,7 @@ x11vnc -nopw -display $DISPLAY -N -forever &
 x11vnc=$!
 
 # Start chrome
-python3 ./src/process_url.py --url $URL --request_id $REQUEST_ID --timeout $TIMEOUT --keep_alive $KEEP_ALIVE &
+python3 ./src/process_url.py --url $URL --request_id $REQUEST_ID --timeout $TIMEOUT $KEEP_ALIVE &
 pyppeteer=$!
 
 wait $pyppeteer

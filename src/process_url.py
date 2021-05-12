@@ -265,11 +265,10 @@ class Page:
         except errors.NetworkError:
             logging.exception(f"Failed to get content for {url}")
 
-        while self.keep_alive:
-            sleep(1.0)
-
-        await page.close()
-        await self.browser.close()
+        logging.info(f"Completed {url}, keep_alive={self.keep_alive}")
+        if not self.keep_alive:
+            await page.close()
+            await self.browser.close()
 
         return
 
@@ -280,7 +279,7 @@ def main(url="http://www.google.com", request_id=None, timeout=5.0, keep_alive=F
     ad_block = AdBlock(["./ads-servers.txt", "./ads-servers.he.txt"])
     logging.basicConfig(level=logging.INFO)
 
-    logging.info(f"Starting Chrome for {url}")
+    logging.info(f"Starting Chrome for {url}, keep_alive={keep_alive}")
     loop = asyncio.get_event_loop()
     page = Page(timeout=timeout, keep_alive=keep_alive, ad_block=ad_block)
     loop.run_until_complete(page.load_page(request_id, url))
@@ -289,7 +288,8 @@ def main(url="http://www.google.com", request_id=None, timeout=5.0, keep_alive=F
     slow_responses = set()
     ads = set()
     info = {}
-    for _, request in requests_info.items():
+    for _, orig_request in requests_info.items():
+        request = RequestInfo(**orig_request.__dict__)
         if request.ts_request:
             request.ts_request = request.ts_request.strftime("%m/%d/%Y %H:%M:%S.%f")
         if request.ts_response:
