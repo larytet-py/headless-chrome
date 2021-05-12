@@ -213,7 +213,6 @@ class Page:
     # https://stackoverflow.com/questions/48986851/puppeteer-get-request-redirects
     async def _get_page(self):
         page = await self.browser.newPage()
-        page.timeout = int(self.timeout * 1000)
         # https://github.com/pyppeteer/pyppeteer/issues/198
         # await page.setRequestInterception(True)
         page.on(
@@ -254,7 +253,13 @@ class Page:
         page = await self._get_page()
         try:
             # page.timeout() accepts milliseconds
-            await page.goto(url, {"timeout": int(self.timeout * 1000)})
+            await page.goto(
+                url,
+                {
+                    "timeout": int(self.timeout * 1000),
+                    "waitUntil": ["load", "networkidle0"],
+                },
+            )
         except errors.TimeoutError:
             logging.exception(f"Failed to load {url}")
 
