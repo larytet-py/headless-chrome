@@ -1,0 +1,3 @@
+easyargs
+dataclasses-json
+tldextract
