@@ -16,6 +16,7 @@ from contextlib import contextmanager
 from shutil import rmtree
 from os import path
 from base64 import b64encode
+from time import sleep
 
 pretty_printer = PrettyPrinter(indent=4)
 
@@ -203,11 +204,11 @@ class EventHandler:
 
 
 class Page:
-    def __init__(self, timeout=600.0, browser=None, ad_block=AdBlockDummy()):
-        self.browser, self.timeout, self.ad_block = browser, timeout, ad_block
+    def __init__(self, timeout=600.0, keep_alive=False, ad_block=AdBlockDummy()):
+        self.timeout, self.ad_block, self.keep_alive = timeout, ad_block, keep_alive
         # Add stop page https://github.com/puppeteer/puppeteer/issues/3238
         self.event_handler = EventHandler(ad_block)
-        self.content, self.screenshot = None, None
+        self.content, self.screenshot, self.browser = None, None, None
 
     # https://stackoverflow.com/questions/48986851/puppeteer-get-request-redirects
     async def _get_page(self):
@@ -249,11 +250,7 @@ class Page:
                 return b64encode(data).decode("utf-8")
 
     async def load_page(self, request_id, url):
-        new_browser = False
-        if self.browser is None:
-            new_browser = True
-            self.browser = await get_browser()
-
+        self.browser = await get_browser()
         page = await self._get_page()
         try:
             # page.timeout() accepts milliseconds
@@ -268,21 +265,24 @@ class Page:
         except errors.NetworkError:
             logging.exception(f"Failed to get content for {url}")
 
+        while self.keep_alive:
+            sleep(1.0)
+
         await page.close()
-        if new_browser:
-            await self.browser.close()
+        await self.browser.close()
+
         return
 
 
 @easyargs
-def main(url="http://www.google.com", request_id=None, timeout=5.0):
+def main(url="http://www.google.com", request_id=None, timeout=5.0, keep_alive=False):
     ts_start = datetime.now()
     ad_block = AdBlock(["./ads-servers.txt", "./ads-servers.he.txt"])
     logging.basicConfig(level=logging.INFO)
 
     logging.info(f"Starting Chrome for {url}")
     loop = asyncio.get_event_loop()
-    page = Page(timeout=timeout, ad_block=ad_block)
+    page = Page(timeout=timeout, keep_alive=keep_alive, ad_block=ad_block)
     loop.run_until_complete(page.load_page(request_id, url))
     requests_info = page.event_handler.requests_info
     serializable_requests = []
@@ -317,6 +317,8 @@ def main(url="http://www.google.com", request_id=None, timeout=5.0):
     info["elapsed"] = (datetime.now() - ts_start).total_seconds()
     json_info = json.dumps(info, indent=2)
     print(f"{json_info}")
+    while keep_alive:
+        sleep(1.0)
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@
 
 ```
 black src/. && docker build --build-arg CACHEBUST=$(date +%s) -t chrome .
-docker run -e TIMEOUT="30.0" -e REQUEST_ID="1" -e URL="http://www.google.com" chrome > site-info.json
+docker run --expose 5900 -e KEEP_ALIVE -e TIMEOUT="30.0" -e REQUEST_ID="1" -e URL="http://www.google.com" chrome > site-info.json
 
 # Try VNC 127.0.0.1:5900
 remmina -c $PWD/local-chrome.remmina
