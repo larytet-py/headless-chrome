@@ -205,6 +205,7 @@ class EventHandler:
 class Page:
     def __init__(self, timeout=600.0, browser=None, ad_block=AdBlockDummy()):
         self.browser, self.timeout, self.ad_block = browser, timeout, ad_block
+        # Add stop page https://github.com/puppeteer/puppeteer/issues/3238
         self.event_handler = EventHandler(ad_block)
         self.content, self.screenshot = None, None
 
