@@ -75,10 +75,10 @@ class AdBlockDummy:
         return False
 
 
-async def get_browser():
+async def get_browser(headless=True):
     browser = await launch(
         {
-            "headless": True,
+            "headless": headless,
             "args": ["--no-sandbox"],
             "executablePath": "/usr/bin/google-chrome-stable",
             "logLevel": logging.ERROR,
@@ -250,7 +250,7 @@ class Page:
                 return b64encode(data).decode("utf-8")
 
     async def load_page(self, request_id, url):
-        self.browser = await get_browser()
+        self.browser = await get_browser(headless=not self.keep_alive)
         page = await self._get_page()
         try:
             # page.timeout() accepts milliseconds

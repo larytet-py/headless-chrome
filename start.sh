@@ -2,6 +2,10 @@
 set -e
 set -x
 
+export QT_X11_NO_MITSHM=1
+export _X11_NO_MITSHM=1
+export _MITSHM=0
+
 # In case the container is restarted 
 [ -f /tmp/.X99-lock ] && rm /tmp/.X99-lock
 

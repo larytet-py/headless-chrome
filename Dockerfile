@@ -63,6 +63,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # (Optional) Install XVFB if there's a need to run browsers in headful mode
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xvfb \
+    x11-apps \
     x11vnc
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
