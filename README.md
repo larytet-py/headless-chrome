@@ -7,34 +7,9 @@
 black src/. && docker build --build-arg CACHEBUST=$(date +%s) -t chrome .
 docker run -e TIMEOUT="30.0" -e REQUEST_ID="1" -e URL="http://www.google.com" chrome > site-info.json
 
-
-
 # Try VNC 127.0.0.1:5900
 remmina -c $PWD/local-chrome.remmina
 
-
-```
-
-## Tips
-
-```
-const page = await browser.newPage()
-
-const redirects = [];
-
-const client = await page.target().createCDPSession();
-await client.send('Network.enable');
-await client.on('Network.requestWillBeSent', (e) => {
-    if (e.type !== "Document") {
-        return;
-    }
-    redirects.push(e.documentURL);
-});
-
-await page.goto('https://www.ford.com');
-await page.waitForNavigation();
-
-console.log(redirects);
 ```
 
 ## Links
