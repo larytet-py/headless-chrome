@@ -235,10 +235,15 @@ class Page:
         )
         return page
 
-    async def _take_screenshot(self, page):
+    async def _take_screenshot(self, page, url):
         with tmpdir() as temp_dir:
             filename = path.join(temp_dir, "image.png")
-            await page.screenshot({"path": filename, "fullPage": True})
+            try:
+                await page.screenshot({"path": filename, "fullPage": True})
+            except errors.NetworkError:
+                logging.exception(f"Failed to get screenshot for {url}")
+                return None
+
             with open(filename, mode="r+b") as f:
                 data = f.read()
                 return b64encode(data).decode("utf-8")
@@ -256,10 +261,7 @@ class Page:
         except errors.TimeoutError:
             logging.exception(f"Failed to load {url}")
 
-        try:
-            self.screenshot = await self._take_screenshot(page)
-        except errors.NetworkError:
-            logging.exception(f"Failed to get screenshot for {url}")
+        self.screenshot = await self._take_screenshot(page, url)
 
         try:
             self.content = await page.content()
