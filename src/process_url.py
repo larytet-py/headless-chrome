@@ -17,6 +17,7 @@ from shutil import rmtree
 from os import path
 from base64 import b64encode
 from time import sleep
+from os import environ
 
 pretty_printer = PrettyPrinter(indent=4)
 
@@ -103,31 +104,34 @@ class RequestInfo:
 
 
 class EventHandler:
-    def __init__(self, ad_block):
+    def __init__(self, ad_block, logger=None):
         self.requests_info = {}
         self.redirects = []
-        self.ad_block = ad_block
+        self._ad_block = ad_block
         self.ts_start = datetime.now()
+        if logger is None:
+            logger = logging.getLogger("headlessness")
+        self._logger = logger
 
     def _process_request(self, r):
         if not hasattr(r, "url"):
-            logging.error(f"request is missing url {r.__dir__()}")
+            self._logger.error(f"request is missing url {r.__dir__()}")
             return True
 
         url = r.url
 
         if not hasattr(r, "_requestId"):
-            logging.error(f"requestID is None for {url} {r.__dir__()}")
+            self._logger.error(f"requestID is None for {url} {r.__dir__()}")
             return True
 
         request_id = r._requestId
         if request_id in self.requests_info:
-            logging.error(
+            self._logger.error(
                 f"requestID {request_id} is already in self.requests_info for {url}: {self.requests_info[request_id]}"
             )
 
         parsed_url = urlparse(url)
-        is_ad = self.ad_block.is_ad(parsed_url.netloc)
+        is_ad = self._ad_block.is_ad(parsed_url.netloc)
 
         requests_info = RequestInfo(
             method=r.method,
@@ -145,28 +149,28 @@ class EventHandler:
 
     def _process_response(self, r):
         if not hasattr(r, "url"):
-            logging.error(f"response is missing url {r.__dir__()}")
+            self._logger.error(f"response is missing url {r.__dir__()}")
             return
 
         url = r.url
         if not r.request:
-            logging.error(f"request is missing in the response for {url}")
+            self._logger.error(f"request is missing in the response for {url}")
             return
 
         if not hasattr(r.request, "_requestId"):
-            logging.error(f"requestID is missing in response for {url}")
+            self._logger.error(f"requestID is missing in response for {url}")
             return
         request_id = r.request._requestId
 
         if request_id not in self.requests_info:
-            logging.error(
+            self._logger.error(
                 f"requestID {request_id} is missing in map of requests for {url}"
             )
             return
 
         request_info = self.requests_info[request_id]
         if request_info.is_ad:
-            logging.debug(f"got response for an ad {url}")
+            self._logger.debug(f"got response for an ad {url}")
 
         request_info.status = r.status
         request_info.ts_response = datetime.now()
@@ -183,7 +187,7 @@ class EventHandler:
         if keep_going:
             return await r.continue_()
 
-        logging.debug(f"aborted ad {r.url}")
+        self._logger.debug(f"aborted ad {r.url}")
         return await r.abort()
 
     async def response_interception(self, r):
@@ -193,26 +197,31 @@ class EventHandler:
 
     async def request_will_be_sent(self, e):
         if "type" not in e:
-            logging.error(f"request type is missing in {e}")
+            self._logger.error(f"request type is missing in {e}")
             return
         if "documentURL" not in e:
-            logging.error(f"documentURL is missing in {e}")
+            self._logger.error(f"documentURL is missing in {e}")
             return
 
         request_type = e["type"]
         if request_type != "Document":
             return
 
-        logging.debug(f"Redirect {pretty_printer.pformat(e)}")
+        self._logger.debug(f"Redirect {pretty_printer.pformat(e)}")
         self.redirects.append(e["documentURL"])
 
 
 class Page:
-    def __init__(self, timeout=600.0, keep_alive=False, ad_block=AdBlockDummy()):
+    def __init__(
+        self, logger=None, timeout=600.0, keep_alive=False, ad_block=AdBlockDummy()
+    ):
         self.timeout, self.ad_block, self.keep_alive = timeout, ad_block, keep_alive
         # Add stop page https://github.com/puppeteer/puppeteer/issues/3238
-        self.event_handler = EventHandler(ad_block)
         self.content, self.screenshot, self.browser = None, None, None
+        if logger is None:
+            logger = logging.getLogger("headlessness")
+        self._logger = logger
+        self.event_handler = EventHandler(ad_block, self._logger)
 
     # https://stackoverflow.com/questions/48986851/puppeteer-get-request-redirects
     async def _get_page(self):
@@ -252,10 +261,10 @@ class Page:
             if screenshot is not None:
                 return screenshot
             sleep(0.5)
-            logging.info(
+            self._logger.info(
                 f"Taking screenshot {url} failed, now is {datetime.now()}, trying until {wait_until}"
             )
-        logging.info(
+        self._logger.info(
             f"Aborted screenshot for {url}, now is {datetime.now()}, trying until {wait_until}"
         )
         return None
@@ -266,7 +275,7 @@ class Page:
             try:
                 await page.screenshot({"path": filename, "fullPage": True})
             except errors.NetworkError:
-                logging.exception(f"Failed to get screenshot for {url}")
+                self._logger.exception(f"Failed to get screenshot for {url}")
                 return None
 
             with open(filename, mode="r+b") as f:
@@ -286,16 +295,16 @@ class Page:
                 },
             )
         except errors.TimeoutError:
-            logging.exception(f"Failed to load {url}")
+            self._logger.exception(f"Failed to load {url}")
 
         self.screenshot = await self._take_screenshot_until_succeds(page, url)
 
         try:
             self.content = await page.content()
         except errors.NetworkError:
-            logging.exception(f"Failed to get content for {url}")
+            self._logger.exception(f"Failed to get content for {url}")
 
-        logging.info(f"Completed {url}, keep_alive={self.keep_alive}")
+        self._logger.info(f"Completed {url}, keep_alive={self.keep_alive}")
         if not self.keep_alive:
             await page.close()
             await self.browser.close()
@@ -381,6 +390,15 @@ def dump_har(report, indent):
     return json.dumps({"log": log}, indent=2)
 
 
+def create_logger():
+    logger = logging.getLogger("headlessness")
+    logger_format = "%(levelname)s:%(filename)s:%(lineno)d:%(message)s"
+    logging.basicConfig(format=logger_format)
+    loglevel = environ.get("LOG_LEVEL", "INFO").upper()
+    logger.setLevel(loglevel)
+    logger.debug("I am using debug log level")
+
+
 @easyargs
 def main(
     url="http://www.google.com",
@@ -390,14 +408,17 @@ def main(
     report_type="json",
 ):
     ad_block = AdBlock(["./ads-servers.txt", "./ads-servers.he.txt"])
-    logging.basicConfig(level=logging.INFO)
+    logger = create_logger()
+    logger.debug("I am using debug log level")
 
-    logging.info(
+    logger.info(
         f"Starting Chrome for {url}, keep_alive={keep_alive}, report_type={report_type}"
     )
 
+    page = Page(
+        logger=logger, timeout=timeout, keep_alive=keep_alive, ad_block=ad_block
+    )
     loop = asyncio.get_event_loop()
-    page = Page(timeout=timeout, keep_alive=keep_alive, ad_block=ad_block)
     loop.run_until_complete(page.load_page(request_id, url))
 
     report = generate_report(url, request_id, page)

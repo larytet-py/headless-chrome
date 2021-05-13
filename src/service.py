@@ -1,10 +1,18 @@
 from urllib.parse import urlparse, parse_qs
+import asyncio
 import logging
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Semaphore, Thread
 from time import time, sleep
 from os import environ
 from dataclasses import dataclass
+import json
+
+from process_url import (
+    Page,
+    generate_report,
+    AdBlock,
+)
 
 
 @dataclass
@@ -17,6 +25,7 @@ class Statistics:
     throttle_ok: int = 0
     throttle_pending_max: int = 0
     throttle_pending: int = 0
+    bad_url_parameters: int = 0
 
     resp_200: int = 0
     resp_400: int = 0
@@ -40,8 +49,9 @@ def _get_url_parameter(parameters, name, default=""):
 
 
 class HeadlessnessServer(BaseHTTPRequestHandler):
-    def __init__(self, logger):
-        self.logger = logger
+    def __init__(self, logger, asyncio_loop):
+        self.logger, self._asyncio_loop = logger, asyncio_loop
+        self.ad_block = AdBlock(["./ads-servers.txt", "./ads-servers.he.txt"])
 
     def __call__(self, *args, **kwargs):
         """
@@ -92,6 +102,16 @@ class HeadlessnessServer(BaseHTTPRequestHandler):
         )
         return True
 
+    def _fech_page(self, url):
+        page = Page(
+            self._logger, timeout=30.0, keep_alive=False, ad_block=self.ad_block
+        )
+        self._asyncio_loop.run_until_complete(page.load_page(self._transaction_id, url))
+
+        report = generate_report(url, self._transaction_id, page)
+        report_str = json.dumps(report, indent=2)
+        return report_str
+
     def _process_post(self, parsed_url):
         if parsed_url.path not in ["/fetch"]:
             _statistics.unknow_post += 1
@@ -99,14 +119,26 @@ class HeadlessnessServer(BaseHTTPRequestHandler):
             self._logger.error(err_msg)
             self._400(err_msg)
             return
-        self._200("Ok")
+
+        parameters = parse_qs(parsed_url.query)
+        url = _get_url_parameter(parameters, "url", None)
+        if url is None:
+            _statistics.bad_url_parameters += 1
+            err_msg = f"Missing URL parameter {parsed_url.path}"
+            self._logger.error(err_msg)
+            self._400(err_msg)
+            return
+
+        report = self._fech_page(url)
+
+        self._200(report)
 
     def do_POST(self):
         parsed_url = urlparse(self.path)
         parameters = parse_qs(parsed_url.query)
 
-        _transaction_id = _get_url_parameter(parameters, "transaction_id")
-        self._logger = LoggerAdapter(self.logger, _transaction_id)
+        self._transaction_id = _get_url_parameter(parameters, "transaction_id")
+        self._logger = LoggerAdapter(self.logger, self._transaction_id)
         self._logger.debug(
             "POST request, path %s, headers %s", str(self.path), str(self.headers)
         )
@@ -136,8 +168,9 @@ def main():
 
     http_port = int(environ.get("PORT", 8081))
     http_interface = environ.get("INTERFACE", "0.0.0.0")
+    asyncio_loop = asyncio.get_event_loop()
     http_server = ThreadingHTTPServer(
-        (http_interface, http_port), HeadlessnessServer(logger)
+        (http_interface, http_port), HeadlessnessServer(logger, asyncio_loop)
     )
     http_server_thread = Thread(target=http_server.serve_forever)
     http_server_thread.start()
