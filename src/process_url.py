@@ -9,7 +9,7 @@ import json
 from dataclasses import dataclass
 from dataclasses_json import dataclass_json
 from pprint import PrettyPrinter
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urlparse
 from tempfile import mkdtemp
 from contextlib import contextmanager
@@ -239,6 +239,21 @@ class Page:
         )
         return page
 
+    async def _take_screenshot_until_succeds(self, page, url):
+        wait_until = self.event_handler.ts_start + timedelta(seconds=self.timeout)
+        while datetime.now() < wait_until:
+            screenshot = await self._take_screenshot(page, url)
+            if screenshot is not None:
+                return screenshot
+            sleep(0.5)
+            logging.info(
+                f"Taking screenshot {url} failed, now is {datetime.now()}, trying until {wait_until}"
+            )
+        logging.info(
+            f"Aborted screenshot for {url}, now is {datetime.now()}, trying until {wait_until}"
+        )
+        return None
+
     async def _take_screenshot(self, page, url):
         with tmpdir() as temp_dir:
             filename = path.join(temp_dir, "image.png")
@@ -267,7 +282,7 @@ class Page:
         except errors.TimeoutError:
             logging.exception(f"Failed to load {url}")
 
-        self.screenshot = await self._take_screenshot(page, url)
+        self.screenshot = await self._take_screenshot_until_succeds(page, url)
 
         try:
             self.content = await page.content()
