@@ -303,15 +303,7 @@ class Page:
         return
 
 
-@easyargs
-def main(url="http://www.google.com", request_id=None, timeout=5.0, keep_alive=False):
-    ad_block = AdBlock(["./ads-servers.txt", "./ads-servers.he.txt"])
-    logging.basicConfig(level=logging.INFO)
-
-    logging.info(f"Starting Chrome for {url}, keep_alive={keep_alive}")
-    loop = asyncio.get_event_loop()
-    page = Page(timeout=timeout, keep_alive=keep_alive, ad_block=ad_block)
-    loop.run_until_complete(page.load_page(request_id, url))
+def generate_report(url, request_id, page):
     event_handler = page.event_handler
     requests_info = event_handler.requests_info
     serializable_requests = []
@@ -331,8 +323,10 @@ def main(url="http://www.google.com", request_id=None, timeout=5.0, keep_alive=F
         d = request.to_dict()
         serializable_requests.append(d)
 
+    info["url"] = url
+    info["request_id"] = request_id
     info["requests"] = serializable_requests
-    info["redirects"] = page.event_handler.redirects
+    info["redirects"] = event_handler.redirects
     info["slow_responses"] = list(slow_responses)
     info["ads"] = list(ads)
 
@@ -345,8 +339,69 @@ def main(url="http://www.google.com", request_id=None, timeout=5.0, keep_alive=F
         info["content"] = b64encode(page.content.encode("utf-8")).decode("utf-8")
 
     info["elapsed"] = (event_handler.ts_last - event_handler.ts_start).total_seconds()
-    json_info = json.dumps(info, indent=2)
-    print(f"{json_info}")
+    return info
+
+
+def dump_har(report, indent):
+    entries = []
+    for r in report["requests"]:
+        request = {
+            "request": {"method": r["method"], "url": r["url"]},
+            "response": {"status": r["status"]},
+            "timings": {
+                "blocked": -1,
+                "dns": -1,
+                "ssl": -1,
+                "connect": -1,
+                "send": -1,
+                "receive": -1,
+                "wait": r["elapsed"],
+            },
+            "_is_ad": r["is_ad"],
+            "_host": r["host"],
+        }
+        entries.append(request)
+
+    creator = {"name": "Headless Chrome", "version": "0.0.0"}
+    log = {
+        "version": "1.2",
+        "creator": creator,
+        "_request_id": report["request_id"],
+        "_redirects": report["redirects"],
+        "_url": report["url"],
+        "_slow_responses": report["slow_responses"],
+        "_ads": report["ads"],
+        "entries": entries,
+    }
+    return {"log": log}
+
+
+@easyargs
+def main(
+    url="http://www.google.com",
+    request_id=None,
+    timeout=5.0,
+    keep_alive=False,
+    report_type="json",
+):
+    ad_block = AdBlock(["./ads-servers.txt", "./ads-servers.he.txt"])
+    logging.basicConfig(level=logging.INFO)
+
+    logging.info(
+        f"Starting Chrome for {url}, keep_alive={keep_alive}, report_type={report_type}"
+    )
+
+    loop = asyncio.get_event_loop()
+    page = Page(timeout=timeout, keep_alive=keep_alive, ad_block=ad_block)
+    loop.run_until_complete(page.load_page(request_id, url))
+
+    report = generate_report(url, request_id, page)
+    if report_type == "json":
+        report_str = json.dumps(report, indent=2)
+    if report_type == "har":
+        report_str = dump_har(report, indent=2)
+    print(f"{report_str}")
+
     while keep_alive:
         sleep(1.0)
 

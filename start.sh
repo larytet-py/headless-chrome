@@ -33,7 +33,7 @@ else
 fi
 
 # Start chrome
-python3 ./src/process_url.py --url $URL --request_id $REQUEST_ID --timeout $TIMEOUT $KEEP_ALIVE_FLAG &
+python3 ./src/process_url.py --url $URL --report_type $REPORT_TYPE --request_id $REQUEST_ID --timeout $TIMEOUT $KEEP_ALIVE_FLAG &
 pyppeteer=$!
 
 wait $pyppeteer

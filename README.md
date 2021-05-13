@@ -38,3 +38,4 @@ remmina -c $PWD/local-chrome.remmina
 * https://pkg.go.dev/github.com/wirepair/gcd/v2/gcdapi#Fetch.Enable  - an API?
 * https://github.com/wirepair/gcd
 * https://github.com/pyppeteer/pyppeteer
+* https://w3c.github.io/web-performance/specs/HAR/Overview.html
