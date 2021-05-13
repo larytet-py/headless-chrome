@@ -378,7 +378,7 @@ def dump_har(report, indent):
     if "content" in report:
         log["_content"] = report["content"]
 
-    return {"log": log}
+    return json.dumps({"log": log}, indent=2)
 
 
 @easyargs
