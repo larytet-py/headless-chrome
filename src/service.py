@@ -5,6 +5,7 @@ from threading import Semaphore, Thread
 from time import time, sleep
 from os import environ
 from dataclasses import dataclass
+from contextlib import contextmanager
 
 
 @dataclass
@@ -69,6 +70,7 @@ class HeadlessnessServer(BaseHTTPRequestHandler):
         except Exception as e:
             self._logger.error(f"Faied to write to remote {e}")
 
+    @contextmanager
     def _check_throttle(self):
         time_start = time()
         if not HeadlessnessServer._throttle.acquire(blocking=True, timeout=40.0):
@@ -89,7 +91,17 @@ class HeadlessnessServer(BaseHTTPRequestHandler):
         _statistics.acquire_pending_max = max(
             _statistics.acquire_pending_max, _statistics.acquire_pending
         )
-        return True
+        yield True
+        HeadlessnessServer._throttle.release()
+
+    def _process_post(self, parsed_url):
+        if parsed_url.path not in ["/fetch"]:
+            _statistics.unknow_post += 1
+            err_msg = f"Unknown post {parsed_url.path}"
+            self._logger.error(err_msg)
+            self._400(err_msg)
+            return
+        self._200("Ok")
 
     def do_POST(self):
         parsed_url = urlparse(self.path)
@@ -100,16 +112,10 @@ class HeadlessnessServer(BaseHTTPRequestHandler):
         self._logger.debug(
             "POST request, path %s, headers %s", str(self.path), str(self.headers)
         )
-        if not self._check_throttle():
-            return
-        if parsed_url.path not in ["/fetch"]:
-            _statistics.unknow_post += 1
-            err_msg = f"Unknown post {parsed_url.path}"
-            self._logger.error(err_msg)
-            self._400()
-            self._write_to_remote(err_msg)
-            return
-        self._200("Ok")
+        with self._check_throttle() as ok:
+            if not ok:
+                return
+            self._process_post(parsed_url)
 
 
 def shutdown():

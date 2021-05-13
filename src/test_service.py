@@ -23,13 +23,13 @@ def teardown_module(module):
 
 
 def test_post():
-    url = "http://0.0.0.0:8081/fetch?ur=http%3A%2F%2Fgoogle.com"
+    url = "http://0.0.0.0:8081/fetch?ur=http%3A%2F%2Fgoogle.com&transaction_id=1"
     request_result = post(url)
     assert (
         request_result.status_code == 200
     ), f"Got response for {url} {request_result.status_code} {request_result.text}"
 
-    url = "http://0.0.0.0:8081/futch?ur=http%3A%2F%2Fgoogle.com"
+    url = "http://0.0.0.0:8081/futch?ur=http%3A%2F%2Fgoogle.com&transaction_id=2"
     request_result = post(url)
     assert (
         request_result.status_code == 400
