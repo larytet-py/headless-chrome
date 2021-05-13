@@ -26,8 +26,14 @@ xvfb=$!
 x11vnc -nopw -display $DISPLAY -N -forever &
 x11vnc=$!
 
+if [[ "${KEEP_ALIVE}" == "true" ]]; then
+  KEEP_ALIVE_FLAG="--keep_alive"
+else
+  KEEP_ALIVE_FLAG=""
+fi
+
 # Start chrome
-python3 ./src/process_url.py --url $URL --request_id $REQUEST_ID --timeout $TIMEOUT $KEEP_ALIVE &
+python3 ./src/process_url.py --url $URL --request_id $REQUEST_ID --timeout $TIMEOUT $KEEP_ALIVE_FLAG &
 pyppeteer=$!
 
 wait $pyppeteer
