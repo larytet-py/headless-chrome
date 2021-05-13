@@ -373,6 +373,11 @@ def dump_har(report, indent):
         "_ads": report["ads"],
         "entries": entries,
     }
+    if "screenshot" in report:
+        log["_screenshot"] = report["screenshot"]
+    if "content" in report:
+        log["_content"] = report["content"]
+
     return {"log": log}
 
 

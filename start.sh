@@ -23,7 +23,7 @@ Xvfb $DISPLAY -screen 0 1024x768x16 -nolisten tcp -nolisten unix &
 xvfb=$!
 
 # https://linux.die.net/man/1/x11vnc
-x11vnc -nopw -display $DISPLAY -N -forever &
+x11vnc -nopw -display $DISPLAY -N -forever > /dev/null &
 x11vnc=$!
 
 if [[ "${KEEP_ALIVE}" == "true" ]]; then
