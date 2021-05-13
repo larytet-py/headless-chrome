@@ -5,19 +5,21 @@ from threading import Semaphore, Thread
 from time import time, sleep
 from os import environ
 from dataclasses import dataclass
-from contextlib import contextmanager
 
 
 @dataclass
 class Statistics:
     timer_1s: int = 0
-    acquire_latency: float = 0
-    acquire_latency_max: float = 0
-    acquire_failed: int = 0
+
+    throttle_latency: float = 0
+    throttle_latency_max: float = 0
+    throttle_failed: int = 0
+    throttle_ok: int = 0
+    throttle_pending_max: int = 0
+    throttle_pending: int = 0
+
     resp_200: int = 0
     resp_400: int = 0
-    acquire_pending_max: int = 0
-    acquire_pending: int = 0
     unknow_post: int = 0
 
 
@@ -70,29 +72,25 @@ class HeadlessnessServer(BaseHTTPRequestHandler):
         except Exception as e:
             self._logger.error(f"Faied to write to remote {e}")
 
-    @contextmanager
     def _check_throttle(self):
         time_start = time()
         if not HeadlessnessServer._throttle.acquire(blocking=True, timeout=40.0):
-            _statistics.acquire_failed += 1
-            err_msg = "Too many requests"
-            self._logger.error(err_msg)
-            self._400(err_msg)
+            _statistics.throttle_failed += 1
             return False
 
+        _statistics.throttle_ok += 1
         elapsed_time = time() - time_start
-        _statistics.acquire_latency = elapsed_time
-        _statistics.acquire_latency_max = max(
-            _statistics.acquire_latency_max, _statistics.acquire_latency_max
+        _statistics.throttle_latency = elapsed_time
+        _statistics.throttle_latency_max = max(
+            _statistics.throttle_latency_max, _statistics.throttle_latency_max
         )
-        _statistics.acquire_pending = (
+        _statistics.throttle_pending = (
             HeadlessnessServer._throttle_max - HeadlessnessServer._throttle._value
         )
-        _statistics.acquire_pending_max = max(
-            _statistics.acquire_pending_max, _statistics.acquire_pending
+        _statistics.throttle_pending_max = max(
+            _statistics.throttle_pending_max, _statistics.throttle_pending
         )
-        yield True
-        HeadlessnessServer._throttle.release()
+        return True
 
     def _process_post(self, parsed_url):
         if parsed_url.path not in ["/fetch"]:
@@ -112,10 +110,15 @@ class HeadlessnessServer(BaseHTTPRequestHandler):
         self._logger.debug(
             "POST request, path %s, headers %s", str(self.path), str(self.headers)
         )
-        with self._check_throttle() as ok:
-            if not ok:
-                return
-            self._process_post(parsed_url)
+
+        if not self._check_throttle():
+            err_msg = "Too many requests"
+            self._logger.error(err_msg)
+            self._400(err_msg)
+            return
+
+        self._process_post(parsed_url)
+        HeadlessnessServer._throttle.release()
 
 
 def shutdown():
