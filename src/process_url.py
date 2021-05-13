@@ -96,6 +96,8 @@ class RequestInfo:
     status: int = None
     ts_request: datetime = None
     ts_response: datetime = None
+    ts_start: datetime = None
+    ts_last: datetime = None
     elapsed: float = 0.0
     is_ad: bool = False
 
@@ -105,6 +107,7 @@ class EventHandler:
         self.requests_info = {}
         self.redirects = []
         self.ad_block = ad_block
+        self.ts_start = datetime.now()
 
     def _process_request(self, r):
         if not hasattr(r, "url"):
@@ -170,6 +173,7 @@ class EventHandler:
         request_info.elapsed = (
             request_info.ts_response - request_info.ts_request
         ).total_seconds()
+        self.ts_last = datetime.now()
         self.requests_info[request_id] = request_info
 
     async def request_interception(self, r):
@@ -257,7 +261,7 @@ class Page:
                 url,
                 {
                     "timeout": int(self.timeout * 1000),
-                    "waitUntil": ["load", "networkidle0"],
+                    "waitUntil": ["load"],  # "networkidle0"],
                 },
             )
         except errors.TimeoutError:
@@ -280,7 +284,6 @@ class Page:
 
 @easyargs
 def main(url="http://www.google.com", request_id=None, timeout=5.0, keep_alive=False):
-    ts_start = datetime.now()
     ad_block = AdBlock(["./ads-servers.txt", "./ads-servers.he.txt"])
     logging.basicConfig(level=logging.INFO)
 
@@ -288,7 +291,8 @@ def main(url="http://www.google.com", request_id=None, timeout=5.0, keep_alive=F
     loop = asyncio.get_event_loop()
     page = Page(timeout=timeout, keep_alive=keep_alive, ad_block=ad_block)
     loop.run_until_complete(page.load_page(request_id, url))
-    requests_info = page.event_handler.requests_info
+    event_handler = page.event_handler
+    requests_info = event_handler.requests_info
     serializable_requests = []
     slow_responses = set()
     ads = set()
@@ -319,7 +323,7 @@ def main(url="http://www.google.com", request_id=None, timeout=5.0, keep_alive=F
     if page.content:
         info["content"] = b64encode(page.content.encode("utf-8")).decode("utf-8")
 
-    info["elapsed"] = (datetime.now() - ts_start).total_seconds()
+    info["elapsed"] = (event_handler.ts_last - event_handler.ts_start).total_seconds()
     json_info = json.dumps(info, indent=2)
     print(f"{json_info}")
     while keep_alive:
