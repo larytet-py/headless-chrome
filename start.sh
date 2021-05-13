@@ -32,8 +32,13 @@ else
   KEEP_ALIVE_FLAG=""
 fi
 
-# Start chrome
-python3 ./src/process_url.py --url $URL --report_type $REPORT_TYPE --request_id $REQUEST_ID --timeout $TIMEOUT $KEEP_ALIVE_FLAG &
+if [[ -z $URL ]]; then
+  # Start HTTP service
+  python3 ./src/service.py --report_type $REPORT_TYPE --timeout $TIMEOUT &
+else
+  # Start chrome
+  python3 ./src/process_url.py --url $URL --report_type $REPORT_TYPE --request_id $REQUEST_ID --timeout $TIMEOUT $KEEP_ALIVE_FLAG &
+fi
 pyppeteer=$!
 
 wait $pyppeteer
