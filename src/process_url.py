@@ -240,6 +240,12 @@ class Page:
         return page
 
     async def _take_screenshot_until_succeds(self, page, url):
+        """
+        Page.goto waits until the 'load' event. Load can be an empty page with a JS
+        triggering a redirect. The screnshot will fail with
+        'pyppeteer.errors.NetworkError: Protocol error (Page.captureScreenshot): Cannot take screenshot with 0 width.`
+        I am trying again until the allotted processing time ends
+        """
         wait_until = self.event_handler.ts_start + timedelta(seconds=self.timeout)
         while datetime.now() < wait_until:
             screenshot = await self._take_screenshot(page, url)
